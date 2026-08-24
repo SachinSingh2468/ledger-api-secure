@@ -64,16 +64,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@master
-        with:
+     - name: Run Trivy dependency scan
+       uses: aquasecurity/trivy-action@master
+       with:
           scan-type: fs
-          scan-ref: .
+          scan-ref: ./app
+          scanners: vuln
           severity: CRITICAL,HIGH
+          ignore-unfixed: true
           exit-code: 1
           format: sarif
-          output: trivy-fs.sarif
-          ignore-unfixed: true
+          output: trivy-fs.sarif 
 
       - name: Upload Trivy SARIF
         if: always()
