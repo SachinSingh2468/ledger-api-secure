@@ -45,6 +45,7 @@ jobs:
             --config p/security-audit \
             --sarif \
             --output semgrep.sarif \
+            --error \
             ./app
 
       - name: Upload Semgrep SARIF
