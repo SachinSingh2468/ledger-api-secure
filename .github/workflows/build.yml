@@ -55,13 +55,39 @@ jobs:
           sarif_file: semgrep.sarif
           category: semgrep
 
+  trivy-fs:
+    name: Trivy - Dependency Scan
+    runs-on: ubuntu-latest
+    needs: semgrep
 
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          format: sarif
+          output: trivy-fs.sarif
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-filesystem
 
   build-and-push:
     name: Build and Push Image
     needs: 
       - gitleaks
       - semgrep
+      - trivy-fs
     runs-on: ubuntu-latest
 
     steps:
