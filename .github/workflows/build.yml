@@ -64,9 +64,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-     - name: Run Trivy dependency scan
-       uses: aquasecurity/trivy-action@master
-       with:
+      - name: Run Trivy dependency scan
+        uses: aquasecurity/trivy-action@master
+        with:
           scan-type: fs
           scan-ref: ./app
           scanners: vuln
