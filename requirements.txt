@@ -1,0 +1,9 @@
+git
+curl
+wget
+unzip
+jq
+ca-certificates
+gnupg
+lsb-release
+apt-transport-https
