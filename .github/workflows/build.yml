@@ -1,4 +1,4 @@
-name: build
+name: Ledger API Secure CI
 
 on:
   push:
@@ -10,10 +10,32 @@ permissions:
   packages: write
 
 jobs:
-  build-and-push:
+
+  gitleaks:
+    name: Secret Scan
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+  build-and-push:
+    name: Build and Push Image
+    needs: gitleaks
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -24,6 +46,10 @@ jobs:
 
       - name: Build and push
         run: |
-          IMAGE=ghcr.io/${{ github.repository_owner }}/ledger-api:latest
-          docker build -t "$IMAGE" ./app
+          IMAGE=ghcr.io/${{ github.repository_owner }}/ledger-api:sha-${GITHUB_SHA::7}
+
+          docker build \
+            -t "$IMAGE" \
+            ./app
+
           docker push "$IMAGE"
