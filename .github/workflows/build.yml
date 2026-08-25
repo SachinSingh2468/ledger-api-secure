@@ -75,6 +75,7 @@ jobs:
           exit-code: 1
           format: sarif
           output: trivy-fs.sarif
+          trivyignores: .trivyignore
           limit-severities-for-sarif: true
 
       - name: Upload Trivy SARIF
@@ -118,7 +119,7 @@ jobs:
             ./app
 
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.IMAGE }}
           scanners: vuln
@@ -127,6 +128,8 @@ jobs:
           exit-code: 1
           format: sarif
           output: trivy-image.sarif
+          trivyignores: .trivyignore
+          limit-severities-for-sarif: true
 
       - name: Upload Trivy image SARIF
         if: always()
