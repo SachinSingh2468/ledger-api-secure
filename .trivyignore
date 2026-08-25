@@ -1,0 +1,7 @@
+# pip 26.2.x vendored/SBOM metadata findings.
+# msgpack is not an application runtime dependency; setuptools runtime is 84.0.0.
+GHSA-6v7p-g79w-8964
+
+# setuptools 70.3.0 is present only in pip's vendored dependency metadata.
+# Runtime setuptools is 84.0.0.
+CVE-2025-47273
