@@ -65,7 +65,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Trivy dependency scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: ./app
@@ -74,7 +74,8 @@ jobs:
           ignore-unfixed: true
           exit-code: 1
           format: sarif
-          output: trivy-fs.sarif 
+          output: trivy-fs.sarif
+          limit-severities-for-sarif: true
 
       - name: Upload Trivy SARIF
         if: always()
