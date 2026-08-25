@@ -1,9 +1,39 @@
 import os
 import hashlib
-
+import socket
+import ipaddress
+from urllib.parse import urlparse
 import requests
 import yaml
 from flask import Flask, request, jsonify
+
+
+def is_safe_host(hostname):
+    try:
+        addresses = socket.getaddrinfo(
+            hostname,
+            None,
+            type=socket.SOCK_STREAM,
+        )
+    except socket.gaierror:
+        return False
+
+    for address in addresses:
+        ip = ipaddress.ip_address(address[4][0])
+
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            return False
+
+    return True
+
+
 
 app = Flask(__name__)
 
@@ -34,18 +64,55 @@ def transactions():
     return jsonify(transactions=LEDGER)
 
 
+#@app.route("/import", methods=["POST"])
+#def import_config():
+#    config = yaml.load(request.data)
+#    return jsonify(loaded=str(config))
+
 @app.route("/import", methods=["POST"])
 def import_config():
-    config = yaml.load(request.data)
+    try:
+        config = yaml.safe_load(request.data)
+    except yaml.YAMLError:
+        return jsonify(error="Invalid YAML"), 400
+
     return jsonify(loaded=str(config))
+
+
+ALLOWED_FETCH_HOSTS = {
+    host.strip()
+    for host in os.environ.get("ALLOWED_FETCH_HOSTS", "").split(",")
+    if host.strip()
+}
 
 
 @app.route("/fetch")
 def fetch():
     url = request.args.get("url", "")
-    resp = requests.get(url, timeout=5)
-    return jsonify(status_code=resp.status_code, body=resp.text[:2048])
+    parsed = urlparse(url)
 
+    if parsed.scheme != "https":
+        return jsonify(error="Only HTTPS URLs are allowed"), 400
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    if not parsed.hostname:
+        return jsonify(error="Invalid URL"), 400
+
+    if parsed.hostname not in ALLOWED_FETCH_HOSTS:
+        return jsonify(error="Host is not allowed"), 403
+
+    if not is_safe_host(parsed.hostname):
+        return jsonify(error="Resolved address is not allowed"), 403
+
+    try:
+        resp = requests.get(  # nosemgrep: python.flask.security.injection.ssrf-requests.ssrf-requests,python.django.security.injection.ssrf.ssrf-injection-requests
+            url,
+            timeout=5,
+            allow_redirects=False,
+        )
+        except requests.RequestException:
+        return jsonify(error="Failed to fetch resource"), 502
+
+    return jsonify(
+        status_code=resp.status_code,
+    )
+
