@@ -82,13 +82,14 @@ jobs:
         with:
           sarif_file: trivy-fs.sarif
           category: trivy-filesystem
-
   build-and-push:
-    name: Build and Push Image
-    needs: 
+    name: Build, Scan and Push Image
+
+    needs:
       - gitleaks
       - semgrep
       - trivy-fs
+
     runs-on: ubuntu-latest
 
     steps:
@@ -103,16 +104,36 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build image
         run: |
           OWNER="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
           IMAGE="ghcr.io/${OWNER}/ledger-api:sha-${GITHUB_SHA::7}"
 
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
           echo "Building image: $IMAGE"
-
 
           docker build \
             -t "$IMAGE" \
             ./app
 
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+          format: sarif
+          output: trivy-image.sarif
+
+      - name: Upload Trivy image SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: Push image to GHCR
+        run: |
           docker push "$IMAGE"
