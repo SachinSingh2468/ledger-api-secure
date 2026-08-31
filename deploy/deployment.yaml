@@ -18,7 +18,8 @@ spec:
       serviceAccountName: ledger-api
       containers:
         - name: ledger-api
-          image: ledger-api:starter
+          #image: ledger-api:starter
+          image: ghcr.io/sachinsingh2468/ledger-api@sha256:0121832d5b37457af0128cdb176bd2d8511d77efff56b0014423dca43c97c1f8
           imagePullPolicy: IfNotPresent
 
           securityContext:
@@ -32,6 +33,10 @@ spec:
                 - ALL
             seccompProfile:
               type: RuntimeDefault
+          
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
 
           env:
             - name: APP_ENV
@@ -83,3 +88,8 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 3
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+

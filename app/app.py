@@ -88,7 +88,7 @@ ALLOWED_FETCH_HOSTS = {
 
 @app.route("/fetch")
 def fetch():
-    url = request.args.get("url", "")
+    url = request.args.get("url", "") # nosemgrep: python.django.security.injection.ssrf.ssrf-injection-requests.ssrf-injection-requests
     parsed = urlparse(url)
 
     if parsed.scheme != "https":
@@ -102,14 +102,10 @@ def fetch():
 
     if not is_safe_host(parsed.hostname):
         return jsonify(error="Resolved address is not allowed"), 403
-
+    
     try:
-        resp = requests.get(  # nosemgrep: python.flask.security.injection.ssrf-requests.ssrf-requests,python.django.security.injection.ssrf.ssrf-injection-requests
-            url,
-            timeout=5,
-            allow_redirects=False,
-        )
-        except requests.RequestException:
+        resp = requests.get(url, timeout=5, allow_redirects=False)  # nosemgrep: python.flask.security.injection.ssrf-requests.ssrf-requests
+    except requests.RequestException:
         return jsonify(error="Failed to fetch resource"), 502
 
     return jsonify(
