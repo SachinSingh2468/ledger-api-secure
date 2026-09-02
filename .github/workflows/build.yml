@@ -13,26 +13,6 @@ permissions:
 
 jobs:
 
-  runner-test:
-    name: Test Self Hosted Runner
-    runs-on: self-hosted
-
-    steps:
-      - name: Runner information
-        run: |
-          echo "Runner: $RUNNER_NAME"
-          echo "OS: $RUNNER_OS"
-          echo "Architecture: $RUNNER_ARCH"
-
-      - name: Check Docker
-        run: docker ps
-
-      - name: Check Kubernetes
-        run: kubectl get nodes
-
-      - name: Check Kind
-        run: kind get clusters
-
   gitleaks:
     name: Secret Scan
     runs-on: ubuntu-latest
@@ -188,3 +168,42 @@ jobs:
           IMAGE_DIGEST: ${{ steps.digest.outputs.IMAGE_DIGEST }}
         run: |
           cosign sign --yes "$IMAGE_DIGEST"
+
+  deploy:
+    name: Deploy to Kind
+    needs: build-and-push
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show image digest
+        env:
+          IMAGE_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
+        run: |
+          echo "Deploying:"
+          echo "$IMAGE_DIGEST"
+
+      - name: Deploy immutable image
+        env:
+          IMAGE_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
+        run: |
+          kubectl -n payments set image deployment/ledger-api \
+            ledger-api="$IMAGE_DIGEST"
+
+      - name: Wait for rollout
+        run: |
+          kubectl -n payments rollout status \
+            deployment/ledger-api \
+            --timeout=180s
+
+      - name: Verify deployment
+        run: |
+          kubectl -n payments get deployment ledger-api
+          kubectl -n payments get pods -o wide
+
+      - name: Verify deployed image
+        run: |
+          kubectl -n payments get deployment ledger-api \
+            -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
