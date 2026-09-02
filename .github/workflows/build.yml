@@ -13,6 +13,26 @@ permissions:
 
 jobs:
 
+  runner-test:
+    name: Test Self Hosted Runner
+    runs-on: self-hosted
+
+    steps:
+      - name: Runner information
+        run: |
+          echo "Runner: $RUNNER_NAME"
+          echo "OS: $RUNNER_OS"
+          echo "Architecture: $RUNNER_ARCH"
+
+      - name: Check Docker
+        run: docker ps
+
+      - name: Check Kubernetes
+        run: kubectl get nodes
+
+      - name: Check Kind
+        run: kind get clusters
+
   gitleaks:
     name: Secret Scan
     runs-on: ubuntu-latest
@@ -95,7 +115,10 @@ jobs:
       - semgrep
       - trivy-fs
 
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+
+    outputs:
+      image_digest: ${{ steps.digest.outputs.IMAGE_DIGEST }}
 
     steps:
 
