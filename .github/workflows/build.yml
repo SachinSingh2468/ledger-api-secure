@@ -152,10 +152,15 @@ jobs:
       - name: Get image digest
         id: digest
         run: |
-          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE")
+          DIGEST=$(docker image inspect "$IMAGE" --format='{{index .RepoDigests 0}}' | sed 's/.*@//')
 
+          IMAGE_DIGEST="${IMAGE%@*}@${DIGEST}"
+
+          echo "IMAGE: $IMAGE"
           echo "Image digest: $DIGEST"
-          echo "IMAGE_DIGEST=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "IMAGE_DIGEST: $IMAGE_DIGEST"
+
+          echo "IMAGE_DIGEST=$IMAGE_DIGEST" >> "$GITHUB_OUTPUT"
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v4.1.0
@@ -184,6 +189,18 @@ jobs:
         run: |
           echo "Deploying:"
           echo "$IMAGE_DIGEST"
+      
+      - name: Validate image digest
+        env:
+          IMAGE_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
+        run: |
+          echo "Image: $IMAGE_DIGEST"
+
+          if [[ "$IMAGE_DIGEST" != ghcr.io/*@sha256:* ]]; then
+            echo "ERROR: Invalid image digest"
+            exit 1
+          fi
+
 
       - name: Deploy immutable image
         env:
