@@ -202,10 +202,12 @@ jobs:
           fi
 
 
-      - name: Deploy immutable image
+      - name: Deploy immutable image and verify
         env:
           IMAGE_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
         run: |
+          set -e
+
           echo "Deploying Immutable image:"
           echo "$IMAGE_DIGEST"
           
@@ -221,11 +223,32 @@ jobs:
 
           kubectl apply -f deploy/deployment.yaml
 
-      - name: Wait for rollout
-        run: |
-          kubectl -n payments rollout status \
-            deployment/ledger-api \
-            --timeout=180s
+          echo "Waiting for Rollout...."
+
+          if ! kubectl -n payments rollout status deployment/ledger-api --timeout=180s; then
+            echo "Rollout failed. Rolling back..."
+            kubectl -n payments rollout undo deployment/ledger-api
+
+            kubectl -n payments rollout status deployment/ledger-api --timeout=180s
+
+            echo "Rollback completed."
+            exit 1
+          fi
+          echo "Rollout successful."
+
+          echo "Running application health check..."
+
+          if ! kubectl -n payments run ledger-health-check --rm --restart=Never --image=curlimages/curl --command -- curl -fsS --max-time 10 http://ledger-api:8080/health; then
+            echo "Health check failed. Rolling back..."
+            kubectl -n payments rollout undo deployment/ledger-api
+
+            kubectl -n payments rollout status deployment/ledger-api --timeout=180s
+
+            echo "Rollback completed."
+            exit 1
+          fi
+
+          echo "Application health check passed."
 
       - name: Verify deployment
         run: |
