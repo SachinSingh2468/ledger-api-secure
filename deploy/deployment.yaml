@@ -27,8 +27,8 @@ spec:
 
       containers:
         - name: ledger-api
-          #image: ledger-api:starter
-          image: ghcr.io/sachinsingh2468/ledger-api@sha256:d543b9d48284bfd722ebdbab54f7f809936324debdb9f3860d826bbb097eb88e
+          image: IMAGE_PLACEHOLDER
+          #image: ghcr.io/sachinsingh2468/ledger-api@sha256:d543b9d48284bfd722ebdbab54f7f809936324debdb9f3860d826bbb097eb88e
           imagePullPolicy: IfNotPresent
 
           securityContext:

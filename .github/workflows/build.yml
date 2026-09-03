@@ -206,8 +206,20 @@ jobs:
         env:
           IMAGE_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
         run: |
-          kubectl -n payments set image deployment/ledger-api \
-            ledger-api="$IMAGE_DIGEST"
+          echo "Deploying Immutable image:"
+          echo "$IMAGE_DIGEST"
+          
+          if [[ "$IMAGE_DIGEST" != ghcr.io/*@sha256:* ]]; then
+            echo "ERROR: Invalid image digest"
+            exit 1
+          fi
+
+          sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_DIGEST|g" deploy/deployment.yaml
+
+          echo "Rendered Image:"
+          grep -n "image:" deploy/deployment.yaml
+
+          kubectl apply -f deploy/deployment.yaml
 
       - name: Wait for rollout
         run: |
