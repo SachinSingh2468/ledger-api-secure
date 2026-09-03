@@ -238,7 +238,7 @@ jobs:
 
           echo "Running application health check..."
 
-          if ! kubectl -n payments run ledger-health-check --rm --restart=Never --image=curlimages/curl --command -- curl -fsS --max-time 10 http://ledger-api:8080/health; then
+          if ! kubectl -n payments run ledger-health-check --rm --attach --restart=Never --image=curlimages/curl --command -- curl -fsS --max-time 10 http://ledger-api:8080/health; then
             echo "Health check failed. Rolling back..."
             kubectl -n payments rollout undo deployment/ledger-api
 
