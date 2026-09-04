@@ -276,20 +276,50 @@ jobs:
 
             echo "Rolling back..."
 
-            kubectl -n payments rollout undo deployment/ledger-api || true
+            kubectl -n payments rollout undo deployment/ledger-api
+
+            echo "Waiting for rollback rollout...."
 
             kubectl -n payments rollout status deployment/ledger-api \
-              --timeout=180s || true
+              --timeout=180s
 
-            exit 1
-          fi
+            echo "Rollback rollout completed."
+
+            echo "Running health check after rollback..."
+            kubectl delete pod ledger-health-check \
+              - n payments \
+              --ignore-not-found=true
+
+            kubectl apply -f deploy/health-check.yaml
+
+            if kubectl wait \
+              --for=jsonpath='{.status.phase}'=Succeeded \
+              pod/ledger-health-check -n payments \
+              --timeout=60s; then
+
+              echo "Rollback health check PASSED."
+              echo "Previous application version is healthy"
+
+            else
+              echo "CRITICAL: Rollback health check FAILED."
+
+              kubectl logs ledger-health-check \
+                -n payments || true
+
+              kubectl delete pod ledger-health-check \
+                -n payments \
+                --ignore-not-found=true
+              exit 1
+            fi
 
           echo "Deleting temporary health-check pod..."
 
           kubectl delete pod ledger-health-check \
             -n payments \
             --ignore-not-found=true
-      
+          exit 1
+        fi
+
       - name: Verify deployment
         run: |
           kubectl -n payments get deployment ledger-api

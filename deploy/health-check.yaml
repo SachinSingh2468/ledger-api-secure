@@ -22,7 +22,7 @@ spec:
         - "10"
         - -H
         - "Host: ledger.local"
-        - http://ingress-nginx-controller.ingress-nginx.svc.cluster.local/health-invalid
+        - http://ingress-nginx-controller.ingress-nginx.svc.cluster.local/health
         #- http://10.96.32.34/health
 
       securityContext:
