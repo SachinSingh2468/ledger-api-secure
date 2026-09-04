@@ -114,5 +114,5 @@ def fetch():
 
 @app.after_request
 def add_version_header(response):
-    response.headers["X-Deployment-Version"] = "v2"
+    response.headers["X-Deployment-Version"] = "v3"
     return response
