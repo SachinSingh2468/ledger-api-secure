@@ -312,13 +312,13 @@ jobs:
               exit 1
             fi
 
-          echo "Deleting temporary health-check pod..."
+           echo "Deleting temporary health-check pod..."
 
-          kubectl delete pod ledger-health-check \
+           kubectl delete pod ledger-health-check \
             -n payments \
             --ignore-not-found=true
-          exit 1
-        fi
+           exit 1
+          fi
 
       - name: Verify deployment
         run: |
