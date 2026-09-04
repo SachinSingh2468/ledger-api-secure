@@ -112,3 +112,7 @@ def fetch():
         status_code=resp.status_code,
     )
 
+@app.after_request
+def add_version_header(response):
+    response.headers["X-Deployment-Version"] = "v2"
+    return response
