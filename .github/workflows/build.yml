@@ -245,23 +245,23 @@ jobs:
           --image=curlimages/curl \
           --overrides='
           {
-          "spec": {
-            "automountServiceAccountToken": false,
-            "securityContext": {
-              "seccompProfile": {
-                "type": "RuntimeDefault"
-            }
-          },
-          "containers": [
-            {
-              "name": "ledger-health-check",
-              "image": "curlimages/curl",
+            "spec": {
+              "automountServiceAccountToken": false,
               "securityContext": {
-                "runAsNonRoot": true,
-                "runAsUser": 65532,
-                "allowPrivilegeEscalation": false,
-                "capabilities": {
-                  "drop": ["ALL"]
+                "seccompProfile": {
+                  "type": "RuntimeDefault"
+                }
+              },
+            "containers": [
+              {
+                "name": "ledger-health-check",
+                "image": "curlimages/curl",
+                "securityContext": {
+                  "runAsNonRoot": true,
+                  "runAsUser": 65532,
+                  "allowPrivilegeEscalation": false,
+                  "capabilities": {
+                    "drop": ["ALL"]
                     } 
                   }
                 }
