@@ -20,11 +20,15 @@ spec:
         - -fsS
         - --max-time
         - "10"
-        - http://ledger-api:8080/health
+        - -H
+        - "Host: ledger.local"
+        - http://10.96.32.34/health
+        #- http://ledger-api:8080/health
 
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
+        runAsGroup: 65532
         allowPrivilegeEscalation: false
         capabilities:
           drop:
