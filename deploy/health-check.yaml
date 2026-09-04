@@ -22,8 +22,8 @@ spec:
         - "10"
         - -H
         - "Host: ledger.local"
-        - http://10.96.32.34/health
-        #- http://ledger-api:8080/health
+        - http://ingress-nginx-controller.ingress-nginx.svc.cluster.local/health-invalid
+        #- http://10.96.32.34/health
 
       securityContext:
         runAsNonRoot: true
