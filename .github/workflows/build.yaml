@@ -1,0 +1,306 @@
+```yaml
+name: Ledger API Secure CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+  id-token: write
+
+jobs:
+
+  gitleaks:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show Gitleaks version
+        run: gitleaks version
+
+
+  semgrep:
+    name: SAST - Semgrep
+    runs-on: ubuntu-latest
+    needs: gitleaks
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: |
+          python -m pip install semgrep
+
+          semgrep scan \
+            --config p/python \
+            --config p/security-audit \
+            --sarif \
+            --output semgrep.sarif \
+            --error \
+            ./app
+
+      - name: Upload Semgrep SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+
+  trivy-fs:
+    name: Trivy - Dependency Scan
+    runs-on: ubuntu-latest
+    #needs: semgrep
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy dependency scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ./app
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+          format: sarif
+          output: trivy-fs.sarif
+          trivyignores: .trivyignore
+          limit-severities-for-sarif: true
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-filesystem
+
+
+  build-and-push:
+    name: Build, Scan and Push Image
+
+    needs:
+      - gitleaks
+      - semgrep
+      - trivy-fs
+
+    runs-on: self-hosted
+
+    outputs:
+      image_digest: ${{ steps.digest.outputs.IMAGE_DIGEST }}
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        run: |
+          OWNER="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          IMAGE="ghcr.io/${OWNER}/ledger-api:sha-${GITHUB_SHA::7}"
+
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "Building image: $IMAGE"
+
+          docker build \
+            -t "$IMAGE" \
+            ./app
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+          format: sarif
+          output: trivy-image.sarif
+          trivyignores: .trivyignore
+          limit-severities-for-sarif: true
+
+      - name: Upload Trivy image SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: Push image to GHCR
+        run: |
+          docker push "$IMAGE"
+
+      - name: Get image digest
+        id: digest
+        run: |
+          DIGEST=$(docker image inspect "$IMAGE" \
+            --format='{{index .RepoDigests 0}}' | sed 's/.*@//')
+
+          IMAGE_DIGEST="${IMAGE%@*}@${DIGEST}"
+
+          echo "IMAGE: $IMAGE"
+          echo "Image digest: $DIGEST"
+          echo "IMAGE_DIGEST: $IMAGE_DIGEST"
+
+          echo "IMAGE_DIGEST=$IMAGE_DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.1.0
+
+      - name: Check Cosign
+        run: cosign version
+
+      - name: Sign image with Cosign
+        env:
+          IMAGE_DIGEST: ${{ steps.digest.outputs.IMAGE_DIGEST }}
+        run: |
+          cosign sign --yes "$IMAGE_DIGEST"
+
+
+  deploy:
+    name: Deploy to Kind
+    needs: build-and-push
+    runs-on: self-hosted
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show image digest
+        env:
+          IMAGE_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
+        run: |
+          echo "Deploying:"
+          echo "$IMAGE_DIGEST"
+
+      - name: Validate image digest
+        env:
+          IMAGE_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
+        run: |
+          echo "Image: $IMAGE_DIGEST"
+
+          if [[ "$IMAGE_DIGEST" != ghcr.io/*@sha256:* ]]; then
+            echo "ERROR: Invalid image digest"
+            exit 1
+          fi
+
+      - name: Deploy immutable image and verify
+        env:
+          IMAGE_DIGEST: ${{ needs.build-and-push.outputs.image_digest }}
+        run: |
+          set -e
+
+          echo "Deploying Immutable image:"
+          echo "$IMAGE_DIGEST"
+
+          if [[ "$IMAGE_DIGEST" != ghcr.io/*@sha256:* ]]; then
+            echo "ERROR: Invalid image digest"
+            exit 1
+          fi
+
+          sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_DIGEST|g" deploy/deployment.yaml
+
+          echo "Rendered Image:"
+          grep -n "image:" deploy/deployment.yaml
+
+          kubectl apply -f deploy/deployment.yaml
+
+          echo "Waiting for Rollout...."
+
+          if ! kubectl -n payments rollout status deployment/ledger-api --timeout=180s; then
+            echo "Rollout failed. Rolling back..."
+
+            kubectl -n payments rollout undo deployment/ledger-api
+
+            kubectl -n payments rollout status deployment/ledger-api --timeout=180s
+
+            echo "Rollback completed."
+            exit 1
+          fi
+
+          echo "Rollout successful."
+
+          echo "Running application health check..."
+
+          if kubectl -n payments run ledger-health-check \
+            --rm \
+            --attach \
+            --restart=Never \
+            --image=curlimages/curl \
+            --overrides='{
+              "spec": {
+                "automountServiceAccountToken": false,
+                "securityContext": {
+                  "seccompProfile": {
+                    "type": "RuntimeDefault"
+                  }
+                },
+                "containers": [
+                  {
+                    "name": "ledger-health-check",
+                    "image": "curlimages/curl",
+                    "securityContext": {
+                      "runAsNonRoot": true,
+                      "runAsUser": 65532,
+                      "allowPrivilegeEscalation": false,
+                      "capabilities": {
+                        "drop": ["ALL"]
+                      }
+                    }
+                  }
+                ]
+              }
+            }' \
+            --command -- \
+            curl -fsS --max-time 10 \
+            http://ledger-api:8080/health
+          then
+            echo "Application health check passed."
+          else
+            echo "Health check failed. Rolling back..."
+
+            kubectl -n payments rollout undo deployment/ledger-api
+
+            kubectl -n payments rollout status deployment/ledger-api --timeout=180s
+
+            echo "Rollback completed."
+            exit 1
+          fi
+
+      - name: Verify deployment
+        run: |
+          kubectl -n payments get deployment ledger-api
+          kubectl -n payments get pods -o wide
+
+      - name: Verify deployed image
+        run: |
+          kubectl -n payments get deployment ledger-api \
+            -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+```
+
